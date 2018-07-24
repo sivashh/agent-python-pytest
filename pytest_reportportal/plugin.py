@@ -55,7 +55,7 @@ def pytest_sessionstart(session):
 
         session.config.py_test_service.start_launch(
             session.config.option.rp_launch,
-            tags=session.config.getini('rp_launch_tags'),
+            tags=session.config.option.rp_launch_tags,
             description=session.config.option.rp_launch_description
         )
         if session.config.pluginmanager.hasplugin('xdist'):
@@ -176,6 +176,12 @@ def pytest_addoption(parser):
         action='store',
         dest='rp_launch_description',
         help='Launch description (overrides rp_launch_description config option)')
+    group.addoption(
+        '--rp-launch-tags',
+        action='store',
+        nargs='+',
+        dest='rp_launch_tags',
+        help='Launch tags (overrides rp_launch_tags config option)')
 
     if PYTEST_HAS_LOGGING_PLUGIN:
         group.addoption(
