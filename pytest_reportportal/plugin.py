@@ -39,24 +39,35 @@ def pytest_sessionstart(session):
     if session.config.getoption('--collect-only', default=False) is True:
         return
 
+    def get_rp_property(prop_name):
+        try:
+            value = getattr(session.config.option, prop_name, None)
+            if not value:
+                value = session.config.getini(prop_name)
+        except AttributeError:
+            raise AttributeError('{} property not set.'.format(prop_name))
+
+        return value
+
     if session.config._reportportal_configured is False:
         # Stop now if the plugin is not properly configured
         return
 
     if is_master(session.config):
         session.config.py_test_service.init_service(
-            project=session.config.getini('rp_project'),
-            endpoint=session.config.getini('rp_endpoint'),
-            uuid=session.config.getini('rp_uuid'),
-            log_batch_size=int(session.config.getini('rp_log_batch_size')),
-            ignore_errors=bool(session.config.getini('rp_ignore_errors')),
-            ignored_tags=session.config.getini('rp_ignore_tags'),
+            project=get_rp_property('rp_project'),
+            endpoint=get_rp_property('rp_endpoint'),
+            uuid=get_rp_property('rp_uuid'),
+            log_batch_size=int(get_rp_property('rp_log_batch_size')),
+            ignore_errors=bool(get_rp_property('rp_ignore_errors')),
+            ignored_tags=get_rp_property('rp_ignore_tags'),
         )
 
         session.config.py_test_service.start_launch(
-            session.config.option.rp_launch,
-            tags=session.config.option.rp_launch_tags,
-            description=session.config.option.rp_launch_description
+            get_rp_property('rp_launch'),
+            tags=get_rp_property('rp_launch_tags'),
+            description=get_rp_property('rp_launch_description'),
+            mode=get_rp_property('rp_mode')
         )
         if session.config.pluginmanager.hasplugin('xdist'):
             wait_launch(session.config.py_test_service.RP.rp_client)
@@ -166,16 +177,39 @@ def pytest_unconfigure(config):
 
 def pytest_addoption(parser):
     group = parser.getgroup('reporting')
+
+    group.addoption(
+        '--rp-uuid',
+        action='store',
+        dest='rp_uuid',
+        help='UUID')
+
+    group.addoption(
+        '--rp-endpoint',
+        action='store',
+        dest='rp_endpoint',
+        help='Server endpoint')
+
+    group.addoption(
+        '--rp-mode',
+        action='store',
+        dest='rp_mode',
+        choices=['DEFAULT', 'DEBUG'],
+        help='rp.mode property. (overrides rp_mode config option)'
+    )
+
     group.addoption(
         '--rp-launch',
         action='store',
         dest='rp_launch',
         help='Launch name (overrides rp_launch config option)')
+
     group.addoption(
         '--rp-launch-description',
         action='store',
         dest='rp_launch_description',
         help='Launch description (overrides rp_launch_description config option)')
+
     group.addoption(
         '--rp-launch-tags',
         action='store',
