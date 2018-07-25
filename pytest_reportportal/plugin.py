@@ -27,6 +27,16 @@ def is_master(config):
     return not hasattr(config, 'slaveinput')
 
 
+def get_rp_property(config, prop_name):
+    try:
+        value = getattr(config.option, prop_name, None)
+        if not value:
+            value = config.getini(prop_name)
+    except AttributeError as e:
+        raise AttributeError('{} rp property not set.'.format(prop_name))
+
+    return value
+
 @pytest.mark.optionalhook
 def pytest_configure_node(node):
     if node.config._reportportal_enabled is False:
@@ -39,35 +49,25 @@ def pytest_sessionstart(session):
     if session.config.getoption('--collect-only', default=False) is True:
         return
 
-    def get_rp_property(prop_name):
-        try:
-            value = getattr(session.config.option, prop_name, None)
-            if not value:
-                value = session.config.getini(prop_name)
-        except AttributeError:
-            raise AttributeError('{} property not set.'.format(prop_name))
-
-        return value
-
     if session.config._reportportal_configured is False:
         # Stop now if the plugin is not properly configured
         return
 
     if is_master(session.config):
         session.config.py_test_service.init_service(
-            project=get_rp_property('rp_project'),
-            endpoint=get_rp_property('rp_endpoint'),
-            uuid=get_rp_property('rp_uuid'),
-            log_batch_size=int(get_rp_property('rp_log_batch_size')),
-            ignore_errors=bool(get_rp_property('rp_ignore_errors')),
-            ignored_tags=get_rp_property('rp_ignore_tags'),
+            project=get_rp_property(session.config, 'rp_project'),
+            endpoint=get_rp_property(session.config, 'rp_endpoint'),
+            uuid=get_rp_property(session.config, 'rp_uuid'),
+            log_batch_size=int(get_rp_property(session.config, 'rp_log_batch_size')),
+            ignore_errors=bool(get_rp_property(session.config, 'rp_ignore_errors')),
+            ignored_tags=get_rp_property(session.config, 'rp_ignore_tags'),
         )
 
         session.config.py_test_service.start_launch(
-            get_rp_property('rp_launch'),
-            tags=get_rp_property('rp_launch_tags'),
-            description=get_rp_property('rp_launch_description'),
-            mode=get_rp_property('rp_mode')
+            get_rp_property(session.config, 'rp_launch'),
+            tags=get_rp_property(session.config, 'rp_launch_tags'),
+            description=get_rp_property(session.config, 'rp_launch_description'),
+            mode=get_rp_property(session.config, 'rp_mode')
         )
         if session.config.pluginmanager.hasplugin('xdist'):
             wait_launch(session.config.py_test_service.RP.rp_client)
@@ -128,17 +128,12 @@ def pytest_sessionfinish(session):
 
 
 def pytest_configure(config):
-    project = config.getini('rp_project')
-    endpoint = config.getini('rp_endpoint')
-    uuid = config.getini('rp_uuid')
+    project = get_rp_property(config, 'rp_project')
+    endpoint = get_rp_property(config, 'rp_endpoint')
+    uuid = get_rp_property(config, 'rp_uuid')
     config._reportportal_configured = all([project, endpoint, uuid])
     if config._reportportal_configured is False:
         return
-
-    if not config.option.rp_launch:
-        config.option.rp_launch = config.getini('rp_launch')
-    if not config.option.rp_launch_description:
-        config.option.rp_launch_description = config.getini('rp_launch_description')
 
     if is_master(config):
         config.py_test_service = PyTestServiceClass()
@@ -191,14 +186,6 @@ def pytest_addoption(parser):
         help='Server endpoint')
 
     group.addoption(
-        '--rp-mode',
-        action='store',
-        dest='rp_mode',
-        choices=['DEFAULT', 'DEBUG'],
-        help='rp.mode property. (overrides rp_mode config option)'
-    )
-
-    group.addoption(
         '--rp-launch',
         action='store',
         dest='rp_launch',
@@ -216,6 +203,14 @@ def pytest_addoption(parser):
         nargs='+',
         dest='rp_launch_tags',
         help='Launch tags (overrides rp_launch_tags config option)')
+
+    group.addoption(
+        '--rp-mode',
+        action='store',
+        dest='rp_mode',
+        choices=['DEFAULT', 'DEBUG'],
+        help='rp.mode property. (overrides rp_mode config option)'
+    )
 
     if PYTEST_HAS_LOGGING_PLUGIN:
         group.addoption(
@@ -272,3 +267,9 @@ def pytest_addoption(parser):
         'rp_ignore_tags',
         type='args',
         help='Ignore specified pytest markers, i.e parametrize')
+
+    parser.addini(
+        'rp_mode',
+        default='DEFAULT',
+        help='rp.mode. Value can be DEFAULT or DEBUG'
+    )
